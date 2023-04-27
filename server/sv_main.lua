@@ -1,7 +1,7 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
 -- Add Discord webhook here.
-local webhook = "https://discord.com/api/webhooks/975587632354562143/FWwwnGe5sMuZo4RnFn2_wZQJUsHcEfhuY0S0Qxk4f1y6WhdkB0zhoJr2KJBSxVswPg_Q"
+local webhook = ""
 
 RegisterNetEvent("ps-camera:cheatDetect", function()
     DropPlayer(source, "Cheater Detected")
