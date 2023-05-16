@@ -2,7 +2,7 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local PlayerData = {}
 local camera = false
 local photo = false
-local fov_max = 70.0
+local fov_max = 80.0
 local fov_min = 5.0 -- max zoom level (smaller fov is more zoom)
 local zoomspeed = 10.0 -- camera zoom speed
 local speed_lr = 8.0 -- speed by which the camera pans left-right
@@ -24,7 +24,7 @@ local function grabWebhook()
         newEvent = RemoveEventHandler(newEvent)
         p:resolve(hook)
     end)
-    TriggerServerEvent("ps-camera:grabHook", Key)
+    TriggerServerEvent("ps-camera:requestWebhook", Key)
     return Citizen.Await(p)
 end
 
@@ -59,7 +59,10 @@ local function CheckInputRotation(cam, zoomvalue)
         local new_z = rotation.z + rightAxisX*-1.0*(speed_ud)*(zoomvalue+0.1)
         local new_x = math.max(math.min(20.0, rotation.x + rightAxisY*-1.0*(speed_lr)*(zoomvalue+0.1)), -89.5)
         SetCamRot(cam, new_x, 0.0, new_z, 2)
-        SetEntityHeading(PlayerPedId(),new_z)
+        -- Moves the entities body if they are not in a vehicle (else the whole vehicle will rotate as they look around :P)
+        if not IsPedSittingInAnyVehicle(PlayerPedId()) then
+            SetEntityHeading(PlayerPedId(), new_z)
+        end
     end
 end
 
@@ -156,14 +159,14 @@ function CameraLoop()
     CreateThread(function()
         local lPed = PlayerPedId()
         local vehicle = GetVehiclePedIsIn(lPed)
-
+        local hook = grabWebhook()
         Wait(500)
 
         SetTimecycleModifier("default")
         SetTimecycleModifierStrength(0.3)
 
         local cam = CreateCam("DEFAULT_SCRIPTED_FLY_CAMERA", true)
-        AttachCamToEntity(cam, lPed, 0.0, 0.0, 1.0, true)
+        AttachCamToEntity(cam, lPed, 0.0, 1.0, 0.8, true)
         SetCamRot(cam, 0.0, 0.0, GetEntityHeading(lPed), 2)
         SetCamFov(cam, fov)
         RenderScriptCams(true, false, 0, true, false)
@@ -176,7 +179,6 @@ function CameraLoop()
                 if cameraprop then DeleteEntity(cameraprop) end
             elseif IsControlJustPressed(1, 176) then
                 PlaySoundFrontend(-1, "Camera_Shoot", "Phone_Soundset_Franklin", false)
-                local hook = grabWebhook()
                 exports['screenshot-basic']:requestScreenshotUpload(tostring(hook), "files[]", function(data)
                     local image = json.decode(data)
                     camera = false
@@ -201,16 +203,24 @@ function CameraLoop()
         DestroyCam(cam, false)
         SetNightvision(false)
         SetSeethrough(false)
+        SendNUIMessage({action = "hideOverlay"})
     end)
 end
 
+RegisterNetEvent("ps-camera:getStreetName", function(url, coords)
+    local streetHash, crossingHash = GetStreetNameAtCoord(coords.x, coords.y, coords.z)
+    local streetName = GetStreetNameFromHashKey(streetHash)
 
-RegisterNetEvent("ps-camera:usePhoto", function(url)
+    TriggerServerEvent("ps-camera:savePhoto", url, streetName)
+end)
+
+
+RegisterNetEvent("ps-camera:usePhoto", function(url, location)
     photo = not photo
 
     if photo then
-        SetNuiFocus(true, true)
-        SendNUIMessage({action = "openPhoto", image = url})
+        SetNuiFocus(true, true);
+        SendNUIMessage({action = "openPhoto", image = url, location = location})
 
         local ped = PlayerPedId()
         SharedRequestAnimDict("amb@world_human_tourist_map@male@base", function()
@@ -218,7 +228,6 @@ RegisterNetEvent("ps-camera:usePhoto", function(url)
         end)
 
         local coords = GetEntityCoords(ped)
-        SetLocation(coords)
         
         if not HasModelLoaded("prop_cs_planning_photo") then
             LoadPropDict("prop_cs_planning_photo")
@@ -229,6 +238,7 @@ RegisterNetEvent("ps-camera:usePhoto", function(url)
         SetModelAsNoLongerNeeded("prop_cs_planning_photo")
     end
 end)
+
 
 RegisterNUICallback("close", function()
     SetNuiFocus(false, false)
